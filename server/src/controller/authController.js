@@ -6,6 +6,7 @@ const { OAuth2Client } = require('google-auth-library'); //for Google OAuth2 aut
 const jwt = require('jsonwebtoken');
 const Users = require('../model/Users');
 const { validationResult } = require('express-validator');
+const { send } = require('../service/emailService');
 const secret = process.env.JWT_SECRET; //secret key for signing JWT
 const refreshSecret = process.env.JWT_REFRESH_TOKEN_SECRET;
 const authController = {
@@ -108,12 +109,19 @@ const authController = {
                 credits: data.credits
             };
             const token = jwt.sign(userDetails, secret, { expiresIn: '1h' });
+            const refreshToken = jwt.sign(userDetails, refreshSecret, { expiresIn: '7d' });
 
-            response.cookie('jwtToken', token, {
+            response.cookie('jwttoken', token, {
                 httpOnly: true,
                 secure: true,
                 domain: 'localhost',
                 path: '/'
+            });
+            response.cookie('refreshToken', refreshToken, {
+                httpOnly: true,
+                secure: true,
+                domain: 'localhost',
+                path: '/',
             });
 
             response.json({ message: 'User authenticated', userDetails: userDetails });
@@ -180,7 +188,7 @@ const authController = {
     },
     refreshToken: async (request, response) => {
         try {
-            const refreshToken = request.cookies?.resfreshToken;
+            const refreshToken = request.cookies?.refreshToken;
             if (!refreshToken) {
                 return response.status(401).json({ message: "No refresh token" });
             }
@@ -197,7 +205,7 @@ const authController = {
 
 
             const newAccessToken = jwt.sign(user, secret, { expiresIn: '1h' });
-            response.cookie('jwtToken', newAccessToken, {
+            response.cookie('jwttoken', newAccessToken, {
                 httpOnly: true,
                 secure: true,
                 domain: 'localhost',
@@ -210,6 +218,85 @@ const authController = {
             response.status(500).json({
                 message: "Internal server error"
             });
+        }
+    },
+    sendResetPasswordToken: async (request, response) => {
+        const errors = validationResult(request);
+        if (!errors.isEmpty()) {
+            return response.status(400).json({ errors: errors.array() });
+        }
+
+        try {
+            const { email } = request.body;
+            
+            // Check if user exists
+            const user = await Users.findOne({ email: email });
+            if (!user) {
+                return response.status(404).json({ message: "User not found with this email" });
+            }
+
+            // Generate 6-digit code
+            const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            // Set expiry time (15 minutes from now)
+            const expiryTime = new Date();
+            expiryTime.setMinutes(expiryTime.getMinutes() + 15);
+
+            // Save code and expiry to database
+            user.resetPasswordCode = resetCode;
+            user.resetPasswordExpiry = expiryTime;
+            await user.save();
+
+            // Send email with reset code
+            const emailSubject = "Password Reset Code";
+            const emailBody = `Your password reset code is: ${resetCode}\n\nThis code will expire in 15 minutes.\n\nIf you didn't request this reset, please ignore this email.`;
+            
+            await send(email, emailSubject, emailBody);
+
+            response.json({ message: "Reset code sent to your email" });
+        } catch (error) {
+            console.log(error);
+            response.status(500).json({ error: 'Internal server error' });
+        }
+    },
+    resetPassword: async (request, response) => {
+        const errors = validationResult(request);
+        if (!errors.isEmpty()) {
+            return response.status(400).json({ errors: errors.array() });
+        }
+
+        try {
+            const { email, code, newPassword } = request.body;
+            
+            // Find user by email
+            const user = await Users.findOne({ email: email });
+            if (!user) {
+                return response.status(404).json({ message: "User not found" });
+            }
+
+            // Check if code exists and is valid
+            if (!user.resetPasswordCode || user.resetPasswordCode !== code) {
+                return response.status(400).json({ message: "Invalid reset code" });
+            }
+
+            // Check if code has expired
+            if (new Date() > user.resetPasswordExpiry) {
+                return response.status(400).json({ message: "Reset code has expired" });
+            }
+
+            // Hash the new password
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            
+            // Update password and clear reset fields
+            user.password = hashedPassword;
+            user.resetPasswordCode = null;
+            user.resetPasswordExpiry = null;
+            await user.save();
+
+            response.json({ message: "Password reset successfully" });
+        } catch (error) {
+            console.log(error);
+            response.status(500).json({ error: 'Internal server error' });
         }
     },
 };

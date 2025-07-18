@@ -36,6 +36,14 @@ const UsersSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
-    subscription: { type: subscriptionSchema, default: () => ({}) }
+    subscription: { type: subscriptionSchema, default: () => ({}) },
+    resetPasswordCode: {
+        type: String,
+        required: false
+    },
+    resetPasswordExpiry: {
+        type: Date,
+        required: false
+    }
 });
 module.exports = mongoose.model('Users', UsersSchema);

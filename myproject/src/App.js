@@ -18,6 +18,8 @@ import ProtectedRoute from "./rbac/ProtectedRoute";
 import UnauthorizedAccess from "./components/UnauthorizedAccess";
 import ManagePayments from "./pages/payments/ManagePayments";
 import AnalyticsDashboard from "./pages/links/AnalyticsDashboard";
+import ForgetPassword from "./pages/ForgetPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function App() {
   //trcaking uder deatils in app because app is the component which decides
@@ -84,6 +86,8 @@ function App() {
         <Route path="/register" element={userDetails ? <Navigate to='/dashboard' /> : <AppLayout><Register /></AppLayout>} />
 
         <Route path="/login" element={userDetails ? <Navigate to="/dashboard" /> : <AppLayout><Login /></AppLayout>} />
+        <Route path="/forget-password" element={userDetails ? <Navigate to="/dashboard" /> : <AppLayout><ForgetPassword /></AppLayout>} />
+        <Route path="/reset-password" element={userDetails ? <UserLayout><ResetPassword /></UserLayout> : <AppLayout><ResetPassword /></AppLayout>} />
         <Route path="/dashboard" element={userDetails ? <UserLayout><Dashboard /></UserLayout> : <Navigate to="/login" />} />
         <Route path="/users" element={userDetails ? <ProtectedRoute roles={['admin']}><UserLayout><ManageUsers /></UserLayout></ProtectedRoute> : <Navigate to='/login' />} />
         <Route path="/unauthorized-access" element={userDetails ? <UserLayout><UnauthorizedAccess /></UserLayout> : <Navigate to="/login" />} />

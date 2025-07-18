@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from "../api/axios";
+import axios from 'axios';
 import { serverEndpoint } from './config';
 import { useDispatch } from 'react-redux';
 import{SET_USER} from './redux/user/actions';
@@ -48,7 +48,7 @@ function Login() {
                 withCredentials: true
             };
             try {
-                const response = await api.post(`/auth/login`, body, configuration);
+                const response = await axios.post(`${serverEndpoint}/auth/login`, body, configuration);
                 // Redirect after successful login
                 dispatch({
                     type: SET_USER,
@@ -67,7 +67,7 @@ function Login() {
     }
     const handleGoogleSignin = async (authResponse) => {
         try {
-            const response = await api.post(`/auth/google-auth`, {
+            const response = await axios.post(`${serverEndpoint}/auth/google-auth`, {
                 idToken: authResponse.credential
             }, {
                 withCredentials: true // to send cookies with the request

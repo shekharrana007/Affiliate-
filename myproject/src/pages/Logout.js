@@ -5,6 +5,7 @@ import { useDispatch } from "react-redux";
 import { serverEndpoint } from "../config/config";
 import { CLEAR_USER } from "../redux/user/actions";
 
+
 function Logout() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
