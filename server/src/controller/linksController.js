@@ -1,34 +1,45 @@
 const Clicks = require("../model/Clicks");
 const Links = require("../model/Links");
 const Users = require('../model/Users');
-const axios=require('axios');
-const {getDeviceInfo}=require("../util/linksUtility")
+const axios = require('axios');
+const { getDeviceInfo } = require("../util/linksUtility");
+const { generateUploadSignature } = require("../service/cloudinaryService");
 const linksController = {
     create: async (request, response) => {
-        const { campaign_tittle, original_url, category } = request.body;
+        const { campaign_tittle, original_url, category, thumbnail } = request.body;
         console.log(campaign_tittle, original_url, category);
         try {
             const user = await Users.findById({ _id: request.user.id });
-            if (user.credits < 1) {
+            
+            // Check if user has active subscription
+            const hasActiveSubscription = user.subscription && 
+                user.subscription.status === 'active' && 
+                user.subscription.end && 
+                new Date() < new Date(user.subscription.end);
+            
+            // If no active subscription, check credits
+            if (!hasActiveSubscription && user.credits < 1) {
                 return response.status(400).json({
                     code: "INSUFFICIENT_FUNDS",
-                    message: "Insufficient Credits"
+                    message: "Insufficient Credits. You need at least 1 credit to create a link."
                 });
             }
-
-
 
             const link = new Links({
                 campaignTittle: campaign_tittle,
                 originalUrl: original_url,
                 category: category,
+                thumbnail: thumbnail,
                 user: request.user.role === 'admin' ? request.user.id : request.user.adminId
-
             });
             await link.save();
 
-            user.credits -= 1;
-            await user.save();
+            // Only deduct credits if user doesn't have active subscription
+            if (!hasActiveSubscription) {
+                user.credits -= 1;
+                await user.save();
+            }
+            
             response.status(200).json({
                 data: { id: link._id },
                 message: "Link created"
@@ -43,9 +54,31 @@ const linksController = {
     },
     getAll: async (request, response) => {
         try {
+            const {
+                currentPage = 0, pageSize = 10,
+                searchTerm = "",
+                sortField = "createdAt", sortOrder = "desc"
+            } = request.query;
+
             const userId = request.user.role === 'admin' ? request.user.id : request.user.adminId;
-            const links = await Links.find({ user: userId }).sort({ createdAt: -1 });
-            return response.json({ data: links });
+
+
+            const skip = parseInt(currentPage) * parseInt(pageSize);
+            const limit = parseInt(pageSize);
+            const sort = { [sortField]: sortOrder == "desc" ? -1 : 1 }
+            const query = {
+                user: userId
+            };
+            if (searchTerm) {
+                query.$or = [
+                    { campaignTittle: new RegExp(searchTerm, "i") },
+                    { category: new RegExp(searchTerm, "i") },
+                    { originalUrl: new RegExp(searchTerm, "i") }
+                ];
+            }
+            const links = await Links.find(query).sort(sort).skip(skip).limit(limit);
+            const total =await Links.countDocuments(query);
+            return response.json({ data: {links,total} });
         }
         catch (error) {
             console.log(error);
@@ -71,6 +104,7 @@ const linksController = {
                     error: "Unauthorized access"
                 });
             }
+            response.json({ data: link });
         }
         catch (error) {
             console.log(error);
@@ -80,6 +114,10 @@ const linksController = {
         }
     },
     update: async (request, response) => {
+        console.log('Update endpoint called');
+        console.log('Request params:', request.params);
+        console.log('Request body:', request.body);
+        console.log('User:', request.user);
         try {
             const linkId = request.params.id;
             if (!linkId) {
@@ -87,7 +125,7 @@ const linksController = {
             }
             const link = await Links.findById(linkId);
             if (!link) {
-                return response.status(404).json({ error: "Link does not exit with the given id" });
+                return response.status(404).json({ error: "Link does not exist with the given id" });
             }
             const userId = request.user.role === 'admin' ? request.user.id : request.user.adminId;
 
@@ -96,16 +134,32 @@ const linksController = {
                     error: "Unauthorized access"
                 });
             }
-            const { campaign_tittle, original_url, category } = request.body;
-            link = await Links.findByIdAndUpdate(linkId, {
+            const { campaign_tittle, original_url, category, thumbnail } = request.body;
+            
+            console.log('Update request body:', request.body);
+            console.log('Link ID:', linkId);
+            console.log('User ID:', userId);
+            
+            // Only update thumbnail if it's provided in the request
+            const updateData = {
                 campaignTittle: campaign_tittle,
                 originalUrl: original_url,
-                category: category,
-            }, { new: true });
-            response.json({ data: link });
+                category: category
+            };
+            
+            // Only include thumbnail in update if it's provided
+            if (thumbnail !== undefined && thumbnail !== null) {
+                updateData.thumbnail = thumbnail;
+            }
+            
+            console.log('Update data:', updateData);
+            
+            const updatedLink = await Links.findByIdAndUpdate(linkId, updateData, { new: true });
+            console.log('Updated link:', updatedLink);
+            response.json({ data: updatedLink });
         }
         catch (error) {
-            console.log(error);
+            console.error('Update error:', error);
             return response.status(500).json({
                 error: "Internal server error"
             });
@@ -191,7 +245,7 @@ const linksController = {
             const { linkId, from, to } = request.query;
             const link = await Links.findById(linkId);
             if (!link) {
-                
+
                 return response.status(404).json({
                     error: "Link not found"
                 });
@@ -218,6 +272,21 @@ const linksController = {
                 message: "Internal server error"
             });
         }
-    }
+    },
+    createUploadSignature: async(request,response)=>{
+        try{
+            const{signature,timestamp}=generateUploadSignature();
+            response.json({
+                timestamp:timestamp,
+                signature:signature,
+                apiKey:process.env.CLOUDINARY_API_KEY,
+                cloudName:process.env.CLOUDINARY_CLOUD_NAME,
+            });
+        }
+        catch(error){
+            console.log(error);
+            response.status(500).json({message:"Internal server error"});
+        }
+    },
 };
 module.exports = linksController;
