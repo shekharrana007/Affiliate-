@@ -1,1 +1,1 @@
-export const serverEndpoint=process.env.REACT_APP_SERVER_ENDPOINT;
+export const serverEndpoint="https://affiliate-backend-8rfx.onrender.com";
