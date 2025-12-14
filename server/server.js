@@ -23,7 +23,10 @@ app.use((request, response, next) => {
 app.use(cookieParser()); // Middleware to parse cookies
 
 const corsOptions = {
-    origin: process.env.CLIENT_ENDPOINT, // Allow requests from the client endpoint specified in .env file
+    origin: [
+    "http://localhost:3000",
+    "https://affiliate-frontend-u3vj.onrender.com"
+  ], // Allow requests from the client endpoint specified in .env file
     credentials: true, // Allow cookies to be sent with requests
 };
 app.use(cors(corsOptions)); // Using CORS middleware with specified options
